@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 app = Flask(__name__)
-CORS(app)
+CORS(app, origins=["https://crypto-prediction-api.netlify.app"])
 
 model = xgb.XGBRegressor()
 model.load_model("xgb_model.json")
