@@ -5,3 +5,4 @@ pandas
 xgboost
 requests
 gunicorn
+scikit-learn
