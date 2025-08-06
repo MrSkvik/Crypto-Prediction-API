@@ -80,7 +80,11 @@ def predict():
         headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
         json={"model": "mixtral-8x7b-32768", "messages": [{"role": "user", "content": prompt}]}
     )
-    ans = resp.json()["choices"][0]["message"]["content"]
+    result = resp.json()
+    print("Groq API raw response:", result)  # Debug log to Render logs
+    if "choices" not in result:
+        return jsonify({"error": result}), 500
+    ans = result["choices"][0]["message"]["content"]
     return jsonify({"prediction": f"{prediction:.2f}", "analysis": ans})
 
 if __name__ == "__main__":
