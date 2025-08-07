@@ -72,10 +72,22 @@ def predict():
         return jsonify({"error": f"Data fetch failed: {str(e)}"}), 500
 
     prediction = model.predict(sample)[0]
-    prompt = (f"You are a top-tier crypto trading assistant. "
-              f"Predicted BTC price: {prediction:.2f} USD. "
-              f"Timeframe: {tf_label}. "
-              f"Advise whether to LONG or SHORT, with Take-Profit and Stop-Loss levels.")
+    prompt = (
+        "You are an expert crypto analyst. Based on the following data, give a clear, short forecast for Bitcoin (BTC). "
+        "Include whether to LONG or SHORT, with exact Take Profit (TP) and Stop Loss (SL) prices. Keep it simple.\n\n"
+        f"XGBoost Prediction: ${prediction:.2f}\n"
+        f"- Current Price: ${df['close'].iloc[-1]:,.2f}\n"
+        f"- Volume: ${df['volume'].iloc[-1]:,.2f}M\n"
+        f"- Timeframe: {tf_label}\n"
+        f"- Volatility: medium\n"
+        f"- Momentum: bullish\n\n"
+        "Format:\n"
+        "Prediction: [price]\n"
+        "Signal: [Long/Short]\n"
+        "Take Profit: [price]\n"
+        "Stop Loss: [price]\n"
+        "Explanation: [max 1 sentence]"
+    )
     resp = requests.post(
         "https://api.groq.com/openai/v1/chat/completions",
         headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
