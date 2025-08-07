@@ -78,7 +78,7 @@ def predict():
     resp = requests.post(
         "https://api.groq.com/openai/v1/chat/completions",
         headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
-        json={"model": "mixtral-8x7b-32768", "messages": [{"role": "user", "content": prompt}]}
+        json={"model": "mixtral-8x7b-instruct-v0.1", "messages": [{"role": "user", "content": prompt}]}
     )
     result = resp.json()
     print("Groq API raw response:", result)  # Debug log to Render logs
