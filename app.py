@@ -6,6 +6,7 @@ import requests
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
+import re
 
 load_dotenv()
 app = Flask(__name__)
@@ -85,7 +86,24 @@ def predict():
     if "choices" not in result:
         return jsonify({"error": result}), 500
     ans = result["choices"][0]["message"]["content"]
-    return jsonify({"prediction": f"{prediction:.2f}", "analysis": ans})
+    import re
+    # Try to extract predicted price from the LLM response
+    match = re.search(r'price of \$?([0-9,\.]+)', ans)
+    predicted_price_from_llm = float(match.group(1).replace(',', '')) if match else None
+
+    # Compute % change based on last known BTC price
+    current_price = df["close"].iloc[-1]
+    if predicted_price_from_llm:
+        change_pct = ((predicted_price_from_llm - current_price) / current_price) * 100
+    else:
+        change_pct = None
+
+    return jsonify({
+        "prediction": f"{prediction:.2f}",
+        "analysis": ans,
+        "price": predicted_price_from_llm,
+        "change": change_pct
+    })
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
