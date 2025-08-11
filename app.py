@@ -94,27 +94,36 @@ def predict():
         json={"model": "llama3-70b-8192", "messages": [{"role": "user", "content": prompt}]}
     )
     result = resp.json()
-    print("Groq API raw response:", result)  # Debug log to Render logs
-    if "choices" not in result:
-        return jsonify({"error": result}), 500
-    ans = result["choices"][0]["message"]["content"]
-    import re
-    # Try to extract predicted price from the LLM response
-    match = re.search(r'price of \$?([0-9,\.]+)', ans)
-    predicted_price_from_llm = float(match.group(1).replace(',', '')) if match else None
+    print("Groq API raw response:", result)
 
-    # Compute % change based on last known BTC price
-    current_price = df["close"].iloc[-1]
-    if predicted_price_from_llm:
-        change_pct = ((predicted_price_from_llm - current_price) / current_price) * 100
+    if isinstance(result, dict) and "choices" in result and result["choices"]:
+        ans = result["choices"][0]["message"]["content"].strip()
     else:
-        change_pct = None
+        signal = "Long" if float(prediction) > float(df["close"].iloc[-1]) else "Short"
+        tp_fallback = round(float(prediction), 2)
+        sl_fallback = round(float(df["close"].iloc[-1]) * (0.994 if signal == "Long" else 1.006), 2)
+        ans = (
+            f"Prediction: ${float(prediction):.2f}\n"
+            f"Signal: {signal}\n"
+            f"Take Profit: ${tp_fallback}\n"
+            f"Stop Loss: ${sl_fallback}\n"
+            f"Explanation: XGBoost target vs current ${float(df['close'].iloc[-1]):.2f}."
+        )
+
+    current_price = float(df["close"].iloc[-1])
+    pred_num = float(prediction)
+    change_pct = ((pred_num - current_price) / current_price) * 100.0 if current_price > 0 else 0.0
+    signal_final = "Long" if pred_num > current_price else "Short"
+    tp_numeric = round(pred_num, 2)
+    sl_numeric = round(current_price * (0.994 if signal_final == "Long" else 1.006), 2)
 
     return jsonify({
-        "prediction": f"{prediction:.2f}",
+        "prediction": round(pred_num, 2),
         "analysis": ans,
-        "price": predicted_price_from_llm,
-        "change": change_pct
+        "price": round(pred_num, 2),
+        "change": round(change_pct, 2),
+        "tp": tp_numeric,
+        "sl": sl_numeric
     })
 
 if __name__ == "__main__":
