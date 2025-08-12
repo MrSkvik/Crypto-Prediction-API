@@ -2,6 +2,7 @@ import os
 import requests
 import xgboost as xgb
 import numpy as np
+import pandas as pd
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from datetime import datetime, timezone
@@ -33,23 +34,41 @@ def fetch_coinbase_candles(granularity: int):
     return data
 
 def prepare_features(candles, lookback: int):
+    """
+    Build a single-row pandas DataFrame with the exact feature names the model
+    was trained with: open, high, low, close, volume, returns, volatility.
+    Coinbase candle format: [time, low, high, open, close, volume] (ascending).
+    """
     window = candles[-lookback:] if len(candles) >= lookback else candles[:]
+    if not window:
+        raise ValueError("Not enough candles returned from Coinbase.")
+
     last = window[-1]
-    # [time, low, high, open, close, volume]
+    # Coinbase entry: [time, low, high, open, close, volume]
     open_p = float(last[3])
     high_p = float(last[2])
     low_p = float(last[1])
     close_p = float(last[4])
     volume = float(last[5])
 
-    rets = (close_p - open_p) / open_p if open_p else 0.0
+    # Simple features
+    returns = (close_p - open_p) / open_p if open_p else 0.0
     highs = np.array([float(c[2]) for c in window], dtype=float)
-    lows = np.array([float(c[1]) for c in window], dtype=float)
+    lows  = np.array([float(c[1]) for c in window], dtype=float)
     with np.errstate(divide='ignore', invalid='ignore'):
-        vol = np.nan_to_num(((highs - lows) / np.maximum(highs, 1e-9)).std(), nan=0.0)
+        volatility = np.nan_to_num(((highs - lows) / np.maximum(highs, 1e-9)).std(), nan=0.0)
 
-    X = np.array([[open_p, high_p, low_p, close_p, volume, rets, float(vol)]], dtype=float)
-    return X, close_p, float(vol)
+    features_df = pd.DataFrame([{
+        "open": open_p,
+        "high": high_p,
+        "low": low_p,
+        "close": close_p,
+        "volume": volume,
+        "returns": returns,
+        "volatility": float(volatility),
+    }], columns=["open","high","low","close","volume","returns","volatility"])
+
+    return features_df, close_p, float(volatility)
 
 @app.route("/predict", methods=["POST"])
 def predict():
@@ -59,10 +78,15 @@ def predict():
         gran, lookback = TF_MAP.get(tf, (300, 12))
 
         candles = fetch_coinbase_candles(gran)
-        X, current_price, vol = prepare_features(candles, lookback)
+        features_df, current_price, vol = prepare_features(candles, lookback)
 
-        booster = model.get_booster()
-        pred = float(booster.predict(xgb.DMatrix(X))[0])
+        try:
+            # Prefer scikit-learn interface with named columns
+            pred = float(model.predict(features_df)[0])
+        except Exception:
+            # Fallback to native Booster if the wrapper is not compatible
+            booster = model.get_booster()
+            pred = float(booster.predict(xgb.DMatrix(features_df.values))[0])
 
         change_pct = (pred - current_price) / current_price * 100.0 if current_price else 0.0
         signal = "Long" if pred >= current_price else "Short"
